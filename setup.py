@@ -9,7 +9,7 @@ setuptools.setup(
     version=slicey.__version__,
     author="TG-Techie (Jonah Y-M)",
     author_email="tgtechie01@gmail.com",
-    description="add mutating slices to python",
+    description="Add Mutating Slices to Python",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/TG-Techie/slicey",

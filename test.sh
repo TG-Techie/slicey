@@ -1,7 +1,8 @@
 #!/bin/sh
 
 # make a fodler to run all the tests next to eachother
-mkdir .testing
+rm -r .testing # clean up old tests for this run
+mkdir .testing # make a new testing dir
 
 # copy slicey into it to provide top level access for test
 cp slicey.py .testing/slicey.py
@@ -22,6 +23,11 @@ do
     fi
 done
 
-echo; echo "$numfailed tests failed"
 
-rm -rf .testing
+if [ $numfailed -eq 0 ]; then
+    rm -rf .testing
+    echo; echo "all tests passed"
+else
+    echo; echo "$numfailed tests failed"
+    echo "leaving test files in place (note: editing them won't edit their intial locations)"
+fi

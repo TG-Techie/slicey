@@ -66,14 +66,13 @@ class _SliceConstructor(Generic[T]):
         while stop < 0:
             stop += len(seq)
 
-        return Slice(
-            seq,
+        return self(
             start=start,
             length=stop - start,
         )
 
     def __call__(self, *, length, start) -> "Slice[T]":
-        return Slice(self._seq, start=length, length=length)
+        return Slice(self._seq, start=start, length=length)
 
 
 class Slice(Generic[T]):
