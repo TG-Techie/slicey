@@ -23,9 +23,11 @@
 import builtins
 from typing import *
 
+__version__ = "0.1.0"
+
 T = TypeVar("T")
 
-_Sliceable = Union["Slice[T]", MutableSequence[T]]
+Sliceable = Union["Slice[T]", MutableSequence[T]]
 
 
 class _SliceConstructor(Generic[T]):
@@ -36,10 +38,15 @@ class _SliceConstructor(Generic[T]):
 
     __slots__ = {"_seq"}
 
-    def __init__(self, seq: _Sliceable) -> None:
+    def __init__(self, seq: Sliceable) -> None:
         self._seq = seq
 
-    def __getitem__(self, s: builtins.slice) -> "Slice[T]":
+    def __getitem__(self, s: Union[int, builtins.slice]) -> "Slice[T]":
+        # allow single item slicing with Slice(...)[n] syntax
+        if isinstance(s, int) or hasattr(s, "__index__"):
+            index = s.__index__()
+            s = builtins.slice(index, index + 1)
+
         assert (
             s.step is None
         ), f"slicing cannot be non-contiguous (got `{s.step!r}` for step)"
@@ -81,7 +88,7 @@ class Slice(Generic[T]):
     slc[2] = 3
     assert ls == [0, 1, -1, 3, 4]
     ```
-    By default, slicing Slice object will return whatever slicing teh base object would normally be.
+    By default, slicing Slice object will return whatever slicing the base object would normally be.
     ```
     assert type(slc[0:1]) == list # evaluates as True
     ```
@@ -95,7 +102,7 @@ class Slice(Generic[T]):
 
     Self = Union["Slice"]
 
-    _seq: _Sliceable
+    _seq: Sliceable
     _start: int
     _length: int
     _constructor: Optional[_SliceConstructor[T]]
@@ -104,12 +111,12 @@ class Slice(Generic[T]):
 
     def __new__(
         cls: Type[Self],
-        seq: _Sliceable,
+        seq: Sliceable,
         start=None,
         length=None,
     ):
         if start is not None and length is not None:
-            return super(Slice, cls).__new__(cls, seq, start=start, length=length)  # type: ignore
+            return super(Slice, cls).__new__(cls)  # type: ignore
         elif start is None and length is None:
             return _SliceConstructor(seq)
         else:
@@ -120,7 +127,7 @@ class Slice(Generic[T]):
 
     def __init__(
         self,
-        seq: _Sliceable,
+        seq: Sliceable,
         *,
         start=None,  # type: ignore
         length=None,  # type: ignore
@@ -177,8 +184,8 @@ class Slice(Generic[T]):
     def _isinited(self) -> bool:
         return hasattr(self, "_start") and hasattr(self, "_length")
 
-    def __getitem__(self, index):
-        if hasattr(index, "__index__"):
+    def __getitem__(self, index: Union[int, builtins.slice]):
+        if isinstance(index, int) or hasattr(index, "__index__"):
             return self._get_item(index.__index__())  # type: ignore
             # idk to test for SupportsIndex in 3.6 yet
         elif isinstance(index, slice):
@@ -189,24 +196,36 @@ class Slice(Generic[T]):
                 f"not {type(index).__name__}"
             )
 
-    def __setitem__(self, index: int, value: T) -> None:
-        index %= self._length
+    def __setitem__(self, index: Union[int, builtins.slice], value: T) -> None:
+        # check for slice assignment as it is not yet supported
+        if isinstance(index, builtins.slice):
+            offset = self._start
+            self._seq.__setitem__(
+                builtins.slice(
+                    index.start + offset,
+                    index.stop + offset,
+                    index.step,
+                ),
+                value,
+            )
+            return
+        elif isinstance(index, int) or hasattr(index, "__index__"):
+            index = self._bounds_check_and_mod(index)
 
-        if index < self._length:
             self._seq[self._start + index] = value
         else:
-            raise IndexError(f"index {index} out of range of {self}")
+            raise NotImplementedError()
 
     def _get_slice(self, s: builtins.slice) -> MutableSequence[T]:
-        offset = self._start
-        return self._seq[s.start + offset : s.stop + offset : s.step]
+
+        offset = self._bounds_check_and_mod(self._start)
+        stop = s.stop % self._length
+        return self._seq[s.start + offset : stop + offset : s.step]
 
     def _get_item(self, index: int) -> T:
         # check that the index is in range assuming the base sequence has not changed
-        if index < self._length:
-            return self._seq[self._start + index]
-        else:
-            raise IndexError(f"index {index} out of range of {self}")
+        index = self._bounds_check_and_mod(index)
+        return self._seq[self._start + index]
 
     def __len__(self) -> int:
         assert self._isinited()
@@ -219,8 +238,20 @@ class Slice(Generic[T]):
         else:
             return None
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f"${self._seq[self._start : self._start+self._length]}"
+
+    def _bounds_check_and_mod(self, index: int) -> int:
+        if index >= self._length:
+            raise IndexError(
+                f"Slice index out of range, got [{index}] in slice of length {self._length}"
+            )
+        elif index < 0:
+            index %= self._length
+        else:
+            pass
+
+        return index
 
     def sort(self, **kwargs) -> None:
         for index, value in enumerate(sorted(self, **kwargs)):
