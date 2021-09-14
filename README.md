@@ -2,6 +2,8 @@
 
 ---
 
+> :warning: there are bugs, if you find one please file an issue
+
 #### Add Mutating Slices to Python
 
 Mutating slices (or "reference slices") deal with a subset of a list as if it was its own list. This contrasts python's native "value slicing" where slicing a list provides a new list.
